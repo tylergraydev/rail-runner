@@ -1,0 +1,6 @@
+{
+  "name": "rail-runner",
+  "version": "0.1.0",
+  "description": "An ASCII endless runner that plays in a side pane while Claude is working",
+  "types": "./types/index.d.ts"
+}
