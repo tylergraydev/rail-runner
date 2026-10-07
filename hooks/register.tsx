@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, Timer } from 'claude-code'
+import type { Register, Timer, EngineInterface, RenderInput } from 'claude-code'
 
 import type { Run } from '../types'
+import { BENCH, fillSlot, inSlot, slotOf } from './bench'
 
 const PANE = 'rail-runner'
 const TITLE = 'Rail Runner'
@@ -31,7 +32,7 @@ const hasTrainInSegment = (s: number, lane: number): boolean => {
   if (s < 2) return false
   const wants = [0, 1, 2].map(l => hash(s, l) < 0.42)
   if (wants.every(Boolean)) wants[s % LANES] = false // always leave a way through
-  return wants[lane]
+  return wants[lane] === true
 }
 
 // The train's rows inside its segment: [start, start + 4]; start is its front.
@@ -190,35 +191,45 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text } = $.ui.resolve(e)
-    const r = await read($, run)
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => drawPane($, e))
 
-    const cols = e.props.bodyColumns || e.viewport?.columns || 40
-    const w = Math.max(5, Math.min(11, Math.floor((cols - 4) / LANES)))
-    const height = Math.max(10, Math.min(40, (e.viewport?.rows ?? 30) - 8))
-
-    const lines: Seg[][] = []
-    for (let i = 0; i < height; i++) lines.push(drawLine(r, r.tick + (height - 3) - i, w))
-
-    return (
-      <Box flexDirection="column">
-        <Box>
-          <Text bold color="magenta">RAIL RUNNER </Text>
-          <Text color="yellow">* {r.coins} </Text>
-          <Text dimColor>{r.tick}m</Text>
-        </Box>
-        {lines.map((segs, i) => (
-          <Box key={`l${i}`}>
-            {segs.map((s, j) => (
-              <Text key={`s${j}`} color={s.color} dimColor={s.dim} bold={s.bold} wrap="truncate">
-                {s.text}
-              </Text>
-            ))}
-          </Box>
-        ))}
-        <Text dimColor>{r.isRunning ? 'Claude is working...' : 'Waiting for Claude.'}</Text>
-      </Box>
-    )
+  // Inside the workbench: fill this pane's slot in its frame.
+  on('ui.render', { component: 'Pane', requestId: BENCH }, async ($, e, next) => {
+    const frame = await next(e)
+    const slot = slotOf(frame, PANE)
+    return slot ? fillSlot(frame, PANE, await drawPane($, inSlot(e, slot.columns))) : frame
   })
+}
+
+/** The pane's drawing, in its own pane or in a workbench slot. */
+async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
+  const { Box, Text } = $.ui.resolve(e)
+  const r = await read($, run)
+
+  const cols = e.props.bodyColumns || e.viewport?.columns || 40
+  const w = Math.max(5, Math.min(11, Math.floor((cols - 4) / LANES)))
+  const height = Math.max(10, Math.min(40, (e.viewport?.rows ?? 30) - 8))
+
+  const lines: Seg[][] = []
+  for (let i = 0; i < height; i++) lines.push(drawLine(r, r.tick + (height - 3) - i, w))
+
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text bold color="magenta">RAIL RUNNER </Text>
+        <Text color="yellow">* {r.coins} </Text>
+        <Text dimColor>{r.tick}m</Text>
+      </Box>
+      {lines.map((segs, i) => (
+        <Box key={`l${i}`}>
+          {segs.map((s, j) => (
+            <Text key={`s${j}`} color={s.color} dimColor={s.dim} bold={s.bold} wrap="truncate">
+              {s.text}
+            </Text>
+          ))}
+        </Box>
+      ))}
+      <Text dimColor>{r.isRunning ? 'Claude is working...' : 'Waiting for Claude.'}</Text>
+    </Box>
+  )
 }
